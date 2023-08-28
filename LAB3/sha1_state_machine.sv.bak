@@ -1,0 +1,195 @@
+
+
+package state_machine_definitions;
+
+	enum logic [1:0] {__RESET = 2'b00, __IDLE = 2'b01, __PROC = 2'b10, __DONE = 2'b11} state;
+	// ...  
+
+endpackage 
+
+`define circularleftshift(x, n) ((x << n) | (x >> (32-n)))
+
+module sha1_state_machine
+(
+	input logic clk,
+	input logic reset_n,
+
+	// 32 bit wide 16 data registers
+	input logic [511:0] data,
+
+	// for illustration purposes only ... 	
+	output logic q_done,
+	output logic q_start,
+	output logic [159:0]q_data;
+);
+
+
+
+	import state_machine_definitions::*;
+	
+	
+	localparam LOOP_ITERATIONS = 80;
+	localparam ITERATIONS      = LOOP_ITERATIONS - 1;
+	localparam BITWIDTH        = $clog2(ITERATIONS);
+	
+	// 32 bit wide H0 to H4 constants for SHA 1
+	logic [31:0] H0, H1, H2, H3, H4;
+
+	logic [31:0] A, B, C, D, E;
+	
+	logic [31:0] logicalF;
+	
+	logic [31:0] temp;
+	
+	logic [31:0] K;
+
+	/* ### start pulse detection ##############################################
+	
+	CPU asserts a start pulse ...
+	
+								        ___________________________________________________
+	start_signal:		__________|                                                   |_______________________________________
+	
+										 ^
+										 |
+										 
+								 ACTUAL START
+						
+	
+	We are using the start_signal to derive a 50MHz related start pulse ..., which is only high for 20ns ... 
+	
+							             _
+							____________| |________________________________________________________________________________________
+	
+	
+	We use this start pulse to trigger our sha-1 processing stage ...
+	
+	*/
+	
+	// with the following structure, we are detecting the rising edge of our start signal ... 
+	
+	logic start_expansion = 1'b0;
+	
+	logic [3:0] sync_reg = 0;
+	
+	// shifting data (start signal) from the right-hand side. shifting everything to the left ... newest data is placed at the LSB side ...
+	always_ff@(posedge clk)
+		begin : start_detection
+			if(reset_n == 1'b0)
+				sync_reg <= 4'b0000;
+			else
+				sync_reg <= {sync_reg[2:0],start_expansion};
+		
+		end : start_detection
+
+	// comparator that continuously evaluates the content of our sync_reg ...
+	logic sync_start; assign sync_start = (sync_reg == 4'b0011) ? 1'b1 : 1'b0; 
+
+	assign q_start = sync_start;
+
+	// ### 'state-machine' ... #######################################################################################################
+
+		
+	logic [BITWIDTH-1:0] state_counter = 'd0;
+	
+	always_ff@(posedge clk)
+		begin : state_machine
+			if(reset_n == 1'b0)
+				begin
+					state_counter <= 0;
+					state 		  <= __RESET;
+				end
+			else
+				begin
+					case(state)
+						__RESET:
+							begin
+								state_counter 	<= 0;
+								state 			<= __IDLE;
+							end	
+						__IDLE: 
+							begin
+								state_counter <= 0;
+								
+								H0 			<= 32'h67452301; 
+								H1 			<= 32'hEFCDAB89; 
+								H2 			<= 32'h98BADCFE; 
+								H3 			<= 32'h10325476; 
+								H4 			<= 32'hC3D2E1F0;
+								
+								A <= H0;
+								B <= H1;
+								C <= H2;
+								D <= H3;
+								E <= H4;
+								
+								if(sync_start)
+									state <= __PROC;
+							end
+						__PROC: 
+							begin
+								if(state_counter >= 0 && state_counter <= 19)
+								begin
+									K <= 32'h5A827999;
+									logicalF <= (B & C) | ( (~B) & D);
+								end
+								else if(state_counter >= 20 && state_counter <= 39)
+								begin
+									K <= 32'h6ED9EBA1;
+									logicalF <= B ^ C ^ D;
+								end
+								else if(state_counter >= 40 && state_counter <= 59)
+								begin
+									K <= 32'h8F1BBCDC;
+									logicalF <= (B & C) | (B & D) | (C & D);
+								end
+								else if(state_counter >= 60 && state_counter <= 79)
+								begin
+									K <= 32'hCA62C1D6;
+									logicalF <= B ^ C ^ D;
+								end
+							
+								if(state_counter < 16)
+									temp <= `circularleftshift(A,5) + logicalF + E + K + data[state_counter];
+								else if(state_counter >= 16 && state_counter <= 79)
+									temp <= `circularleftshift(A,5) + logicalF + E + K + 
+											`circularleftshift((data[state_counter - 3] ^ data[state_counter - 8] ^ data[state_counter - 14] ^ data[state_counter - 16]), 1);
+
+									E <= D;
+									D <= C;
+									C <= `circularleftshift(B, 30);
+									B <= A;
+									A <= temp;
+
+								if(state_counter == ITERATIONS)
+									begin
+									start_expansion  <= 1'b0;
+										state_counter <= 0;
+										state         <= __DONE;
+									end
+								else
+									begin
+										state_counter <= state_counter + 1;
+										state         <= __PROC;
+									end
+							end
+						__DONE:
+							begin
+								q_data		  <={H0,H1,H2,H3,H4};
+								state			  <= __IDLE;
+							end
+						default:
+							begin
+								state_counter <= 0;
+								state 		  <= __RESET;
+							end
+					endcase
+				end
+			end : state_machine
+				
+				
+			assign q_done = (state == __DONE) ? 1'b1 : 1'b0;
+				
+			assign q_state   = state;
+
+endmodule 

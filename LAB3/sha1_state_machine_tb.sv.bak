@@ -1,0 +1,80 @@
+
+
+`timescale 1ns/1ps
+
+`define HALF_CLOCK_PERIOD   10
+`define RESET_PERIOD 	   100
+`define DELAY 	    	   	200
+`define SIM_DURATION 	  5000
+
+module sha1_state_machine_tb();
+
+	// ### signals that should get monitored ... 
+	logic tb_q_start;
+	logic tb_q_done;
+	logic [1:0] tb_q_state;
+	logic [31:0] tb_q_data_0;
+	logic [31:0] tb_q_data_1;
+	logic [31:0] tb_q_data_2;
+	logic [31:0] tb_q_data_3;
+	logic [31:0] tb_q_data_4;
+	logic [31:0] tb_data [15:0] = '{32'h00000018, 32'h00000000, 32'h00000000, 32'h00000000,
+									32'h00000000, 32'h00000000, 32'h00000000, 32'h00000000,
+									32'h00000000, 32'h00000000, 32'h00000000, 32'h00000000,
+									32'h00000000, 32'h00000000, 32'h00000000, 32'h61626380};
+	
+	// ### clock generation process ...
+ 	initial 
+		begin: clock_generation_process
+			logic tb_local_clock = 0;
+				forever begin
+					#`HALF_CLOCK_PERIOD tb_local_clock = ~tb_local_clock;
+				end
+		end	
+
+	logic tb_local_reset_n = 0;
+	
+	initial 
+		begin: reset_generation_process
+			$display ("Simulation starts ...");
+			// reset assertion ... 
+			#`RESET_PERIOD tb_local_reset_n = 1'b1;
+		end
+		
+	logic [7:0] counter = 0;
+	
+	always_ff@(posedge tb_local_clock)
+		counter = counter + 1;
+		
+	// if counter is equal to 255, tb_start is set to one ... 
+	logic tb_start; assign tb_start = (counter >  255) ? 1'b1 : 1'b0;
+		
+	initial
+	begin: data_printing
+		$display("%x",tb_q_data_0); 
+		$display("%x",tb_q_data_1); 
+		$display("%x",tb_q_data_2); 
+		$display("%x",tb_q_data_3); 
+		$display("%x",tb_q_data_4); 
+	end
+	
+	initial
+	begin
+		#`SIM_DURATION
+		$display ("Simulation done ...");
+		$stop();
+	end
+	
+	sha1_state_machine dut_0 (.clk(tb_local_clock),
+									  .reset_n(tb_local_reset_n),
+									  .start(tb_start),
+									  .q_start(tb_q_start),
+									  .q_done(tb_q_done),
+									  .q_data(tb_q_data),
+									  .q_state(tb_q_state)
+									 );
+									 
+									 
+
+
+endmodule 
