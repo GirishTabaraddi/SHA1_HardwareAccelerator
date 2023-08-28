@@ -1,0 +1,16 @@
+Analysis & Synthesis Status : Successful - Thu Dec 08 18:30:53 2022
+Quartus Prime Version : 18.1.0 Build 625 09/12/2018 SJ Lite Edition
+Revision Name : fsoc_lab
+Top-level Entity Name : top_level_sys
+Family : MAX 10
+Total logic elements : 3,784
+    Total combinational functions : 3,064
+    Dedicated logic registers : 2,146
+Total registers : 2146
+Total pins : 12
+Total virtual pins : 0
+Total memory bits : 383,360
+Embedded Multiplier 9-bit elements : 6
+Total PLLs : 0
+UFM blocks : 0
+ADC blocks : 0
